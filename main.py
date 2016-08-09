@@ -6,8 +6,8 @@ import numpy as np
  
 class Player:
     def __init__(self, maze):
-        self.x = 44
-        self.y = 44
+        self.x = 128
+        self.y = 128
         self.speed = .25
         self.maze = maze
         self.counter = 0
@@ -43,6 +43,7 @@ class Maze:
     def draw(self,display_surf,image_surf):
         bx = 0
         by = 0
+        shadows = []
         for i in range(0,self.M*self.N):
             if self.maze[ bx + (by*self.M) ] == 1:
                 block_pos = ( bx * self.block_size , by * self.block_size)
@@ -51,14 +52,34 @@ class Maze:
                 if (bx + ((by+1)*self.M)) < len(self.maze):
                     if self.maze[ (bx + (by+1)*self.M) ] == 0:
                         display_surf.blit(image_surf[0][1],( bx * self.block_size , by * self.block_size))
-                    else:
-                        display_surf.blit(image_surf[0][0],( bx * self.block_size , by * self.block_size))
+                        shadows.append(( bx * self.block_size , (by+1) * self.block_size))
                 else:
                     display_surf.blit(image_surf[0][0],( bx * self.block_size , by * self.block_size))
             else:
                 # display_surf.blit(image_surf[1][np.random.randint(0,4)],( bx * self.block_size , by * self.block_size))
                 display_surf.blit(image_surf[1][0],( bx * self.block_size , by * self.block_size))
 
+            bx = bx + 1
+            if bx > self.M-1:
+                bx = 0 
+                by = by + 1
+                
+        for shadow in shadows:
+            display_surf.blit(image_surf[2][2],shadow)
+                
+    def draw_walls(self,display_surf,image_surf):
+        bx = 0
+        by = 0
+        for i in range(0,self.M*self.N):
+            if self.maze[ bx + (by*self.M) ] == 1:
+                block_pos = ( bx * self.block_size , by * self.block_size)
+                
+                if (bx + ((by+1)*self.M)) < len(self.maze):
+                    if self.maze[ (bx + (by+1)*self.M) ] != 0:
+                        display_surf.blit(image_surf[0],( bx * self.block_size , by * self.block_size))
+                else:
+                    display_surf.blit(image_surf[0],( bx * self.block_size , by * self.block_size))
+                    
             bx = bx + 1
             if bx > self.M-1:
                 bx = 0 
@@ -77,6 +98,14 @@ class App:
         self.maze = Maze()
         self.player = Player(self.maze)
         self.counter = 0
+        self.fullscreen = False
+        
+    def toggle_fullscreen(self):
+        self.fullscreen = not self.fullscreen
+        if self.fullscreen:
+            self.screen = pygame.display.set_mode((self.windowWidth, self.windowHeight), pygame.FULLSCREEN)
+        else:
+            self.screen = pygame.display.set_mode((self.windowWidth, self.windowHeight))
  
     def on_init(self):
         pygame.init()
@@ -93,11 +122,10 @@ class App:
         self.no_ammo = pygame.mixer.Sound("assets/player_noammo.ogg")
 
         ss = spritesheet.spritesheet('assets/tiles_nooffset.png')
-        self._block_surf = ss.images_at([(3*32, 6*32+8, 32, 32),(3*32, 7*32, 32, 32)], colorkey=(255,255,255))
         
-        self._floor_surf = []
-        # Load two images into an array, their transparent bit is (255, 255, 255)
-        self._floor_surf = ss.images_at([(32*i, 0, 32, 32) for i in range(4)], colorkey=(255, 255, 255))
+        self._block_surf = ss.images_at([(3*32, 6*32+8, 32, 32),(3*32, 7*32, 32, 32)])
+        self._floor_surf = ss.images_at([(32*i, 0, 32, 32) for i in range(4)])
+        self._shadows_surf = ss.images_at([(32*i, 32, 32, 32) for i in range(9)])
     
         self._image_surf = pygame.image.load('assets/sprite_player_0.png').convert()
         self._player_surf_down = ['assets/sprite_player_%i.png' %i for i in range(6)]
@@ -127,14 +155,18 @@ class App:
             elif ev.type == KEYDOWN:
                 if ev.key == K_ESCAPE:
                     self._running = False
+            elif ev.type == KEYUP:
+                if ev.key == K_F11:
+                    self.toggle_fullscreen()
  
     def on_loop(self):
         pass
  
     def on_render(self):
         self._display_surf.fill((0,0,0))
-        self.maze.draw(self._display_surf, [self._block_surf, self._floor_surf])
+        self.maze.draw(self._display_surf, [self._block_surf, self._floor_surf, self._shadows_surf])
         self._display_surf.blit(self._image_surf,(self.player.x,self.player.y))
+        self.maze.draw_walls(self._display_surf, self._block_surf)
         pygame.display.flip()
         self.on_event(pygame.event.get())
  
@@ -149,11 +181,11 @@ class App:
         while( self._running ):
             pygame.event.pump()
             keys = pygame.key.get_pressed()
-            if keys[K_LEFT]:
-                if keys[K_UP]:
+            if keys[K_a]:
+                if keys[K_w]:
                     images = self.get_player_sprite('upleft')
                     self.player.move(-2, 0); self.player.move(0, -2)
-                elif keys[K_DOWN]:
+                elif keys[K_s]:
                     images = self.get_player_sprite('downleft')
                     self.player.move(-2, 0); self.player.move(0, 2)
                 else:   
@@ -161,11 +193,11 @@ class App:
                     self.player.move(-2, 0)
                 self._image_surf = pygame.image.load(images[self.counter])
                 self.counter = (self.counter + 1) % len(images)
-            elif keys[K_RIGHT]:
-                if keys[K_UP]:
+            elif keys[K_d]:
+                if keys[K_w]:
                     images = self.get_player_sprite('upright')
                     self.player.move(2, 0); self.player.move(0, -2)
-                elif keys[K_DOWN]:
+                elif keys[K_s]:
                     images = self.get_player_sprite('downright')
                     self.player.move(2, 0); self.player.move(0, 2)
                 else:   
@@ -173,13 +205,13 @@ class App:
                     self.player.move(2, 0)
                 self._image_surf = pygame.image.load(images[self.counter])
                 self.counter = (self.counter + 1) % len(images)
-            elif keys[K_UP]:
+            elif keys[K_w]:
                 images = self.get_player_sprite('up')
                 self._image_surf = pygame.image.load(images[self.counter])
                 self.counter = (self.counter + 1) % len(images)
                 
                 self.player.move(0, -2)
-            elif keys[K_DOWN]:
+            elif keys[K_s]:
                 images = self.get_player_sprite('down') 
                 self._image_surf = pygame.image.load(images[self.counter])
                 self.counter = (self.counter + 1) % len(images)
